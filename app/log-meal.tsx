@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,14 +22,48 @@ import { useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import { SPOONACULAR_API_KEY } from '../constants/ApiKey';
 import * as ImagePicker from 'expo-image-picker';
+import Colors from '../constants/Colors';
+import CommonStyles from '../constants/CommonStyles';
+
+interface NutritionData {
+  calories: { value: number };
+  protein: { value: number };
+  carbs: { value: number };
+  fat: { value: number };
+}
 
 export default function LogMeal() {
   const [mealDescription, setMealDescription] = useState('');
   const [loading, setLoading] = useState(false);
-  const [nutrition, setNutrition] = useState(null);
+  const [nutrition, setNutrition] = useState<NutritionData | null>(null);
   const [portionSize, setPortionSize] = useState(1); // 1 = normal, 0.8 = small, 1.2 = large
-  const [image, setImage] = useState(null); // State for selected image
+  const [image, setImage] = useState<string | null>(null); // State for selected image
   const [imageURL, setImageURL] = useState(''); // State for uploaded image URL
+  const [isManualInput, setIsManualInput] = useState(false);
+  const [selectedButton, setSelectedButton] = useState<'estimate' | 'manual' | null>(null);
+  const [manualNutrition, setManualNutrition] = useState({
+    calories: '',
+    protein: '',
+    carbs: '',
+    fat: '',
+  });
+
+  // Add effect to update manual nutrition values when portion size changes
+  useEffect(() => {
+    if (isManualInput && nutrition) {
+      const baseCalories = parseFloat(manualNutrition.calories) || 0;
+      const baseProtein = parseFloat(manualNutrition.protein) || 0;
+      const baseCarbs = parseFloat(manualNutrition.carbs) || 0;
+      const baseFat = parseFloat(manualNutrition.fat) || 0;
+
+      setManualNutrition({
+        calories: Math.round(baseCalories * portionSize).toString(),
+        protein: Math.round(baseProtein * portionSize).toString(),
+        carbs: Math.round(baseCarbs * portionSize).toString(),
+        fat: Math.round(baseFat * portionSize).toString(),
+      });
+    }
+  }, [portionSize]);
 
   const router = useRouter();
 
@@ -41,6 +75,14 @@ export default function LogMeal() {
 
     setLoading(true);
     setNutrition(null);
+    setIsManualInput(false);
+    setSelectedButton('estimate');
+    setManualNutrition({
+      calories: '',
+      protein: '',
+      carbs: '',
+      fat: '',
+    });
 
     try {
       const apiKey = SPOONACULAR_API_KEY;
@@ -120,9 +162,20 @@ export default function LogMeal() {
         currentProtein = data.proteinConsumed || 0;
       }
 
-      const mealCalories = Math.round(nutrition.calories.value * portionSize);
+      let mealCalories, mealProtein, mealCarbs, mealFat;
+      if (isManualInput) {
+        mealCalories = Math.round(parseFloat(manualNutrition.calories) || 0);
+        mealProtein = Math.round(parseFloat(manualNutrition.protein) || 0);
+        mealCarbs = Math.round(parseFloat(manualNutrition.carbs) || 0);
+        mealFat = Math.round(parseFloat(manualNutrition.fat) || 0);
+      } else {
+        mealCalories = Math.round(nutrition.calories.value * portionSize);
+        mealProtein = Math.round(nutrition.protein.value * portionSize);
+        mealCarbs = Math.round(nutrition.carbs.value * portionSize);
+        mealFat = Math.round(nutrition.fat.value * portionSize);
+      }
+
       const updatedCalories = currentCalories + mealCalories;
-      const mealProtein = Math.round(nutrition.protein.value * portionSize);
       const updatedProtein = currentProtein + mealProtein;
 
       // Update total calories and protein in Firestore
@@ -134,8 +187,8 @@ export default function LogMeal() {
       await addDoc(userMealsCollection, {
         description: mealDescription,
         calories: mealCalories,
-        carbs: Math.round(nutrition.carbs.value * portionSize),
-        fat: Math.round(nutrition.fat.value * portionSize),
+        carbs: mealCarbs,
+        fat: mealFat,
         protein: mealProtein,
         photoURL: photoURL || '',
         hasPhoto: !!photoURL,
@@ -150,101 +203,183 @@ export default function LogMeal() {
     }
   };
 
+  const handleManualInput = () => {
+    if (!mealDescription.trim()) {
+      Alert.alert('Error', 'Please enter a description of your meal.');
+      return;
+    }
+    setIsManualInput(true);
+    setSelectedButton('manual');
+    setNutrition({
+      calories: { value: 0 },
+      protein: { value: 0 },
+      carbs: { value: 0 },
+      fat: { value: 0 },
+    });
+  };
+
+  const updateManualNutrition = (field: keyof typeof manualNutrition, value: string) => {
+    setManualNutrition(prev => ({ ...prev, [field]: value }));
+    if (nutrition) {
+      const numValue = parseFloat(value) || 0;
+      setNutrition(prev => ({
+        ...prev!,
+        [field]: { value: numValue }
+      }));
+    }
+  };
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[CommonStyles.formContainer, { backgroundColor: Colors.lightorange }]}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           <ScrollView
-            contentContainerStyle={styles.scrollContainer}
+            contentContainerStyle={CommonStyles.formScrollContainer}
             keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.header}>Log Meal</Text>
+            <Text style={CommonStyles.formHeader}>Log Meal</Text>
   
             <TextInput
-              style={styles.input}
+              style={CommonStyles.formInput}
               placeholder="Describe your meal (e.g., 'Hamburger')"
-              placeholderTextColor="#6C757D"
+              placeholderTextColor={Colors.grey}
               value={mealDescription}
               onChangeText={setMealDescription}
             />
   
-            <TouchableOpacity style={styles.estimateButton} onPress={fetchNutrition}>
-              <Text style={styles.buttonText}>{loading ? 'Estimating...' : 'Estimate Nutrition'}</Text>
-            </TouchableOpacity>
+            <View style={CommonStyles.buttonContainer}>
+              <TouchableOpacity 
+                style={[
+                  CommonStyles.estimateButton, 
+                  { backgroundColor: selectedButton === 'estimate' ? Colors.orange : Colors.midorange }
+                ]} 
+                onPress={fetchNutrition}
+              >
+                <Text style={CommonStyles.buttonText}>{loading ? 'Estimating...' : 'Estimate Nutrition'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[
+                  CommonStyles.estimateButton, 
+                  { backgroundColor: selectedButton === 'manual' ? Colors.orange : Colors.midorange }
+                ]} 
+                onPress={handleManualInput}
+              >
+                <Text style={CommonStyles.buttonText}>Enter Manual Info</Text>
+              </TouchableOpacity>
+            </View>
   
-            {loading && <ActivityIndicator size="large" color="#FFA500" style={styles.loader} />}
+            {loading && <ActivityIndicator size="large" color={Colors.orange} style={CommonStyles.loader} />}
   
             {nutrition && (
-              <View style={styles.resultsContainer}>
-                <Text style={styles.resultText}>Calories: {Math.round(nutrition.calories.value * portionSize)} kcal</Text>
-                <Text style={styles.resultText}>Carbs: {Math.round(nutrition.carbs.value * portionSize)} g</Text>
-                <Text style={styles.resultText}>Fat: {Math.round(nutrition.fat.value * portionSize)} g</Text>
-                <Text style={styles.resultText}>Protein: {Math.round(nutrition.protein.value * portionSize)} g</Text>
-  
-                {/* Portion Size Adjustment Buttons */}
-                <View style={styles.portionContainer}>
-                  <Text style={styles.portionText}>Portion Size:</Text>
-                  <TouchableOpacity
-                    style={[styles.portionButton, portionSize === 0.8 && styles.activePortionButton]}
-                    onPress={() => setPortionSize(0.8)}
-                  >
-                    <Text style={styles.portionButtonText}>Small</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.portionButton, portionSize === 1 && styles.activePortionButton]}
-                    onPress={() => setPortionSize(1)}
-                  >
-                    <Text style={styles.portionButtonText}>Normal</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.portionButton, portionSize === 1.2 && styles.activePortionButton]}
-                    onPress={() => setPortionSize(1.2)}
-                  >
-                    <Text style={styles.portionButtonText}>Large</Text>
-                  </TouchableOpacity>
-                </View>
-  
-                {/* Slider for Adjusting Portion Size */}
-                <View style={styles.sliderContainer}>
-                  <Text style={styles.adjustText}>Adjust Portion Size: {portionSize.toFixed(1)}x</Text>
-                  <Slider
-                    style={styles.slider}
-                    minimumValue={0.2}
-                    maximumValue={1.8}
-                    step={0.1}
-                    value={portionSize}
-                    onValueChange={(value) => setPortionSize(value)}
-                    minimumTrackTintColor="#FFA500"
-                    maximumTrackTintColor="#DDD"
-                    thumbTintColor="#FF8C00"
-                  />
-                </View>
+              <View style={CommonStyles.resultsContainer}>
+                {isManualInput ? (
+                  <>
+                    <TextInput
+                      style={CommonStyles.formInput}
+                      placeholder="Calories"
+                      placeholderTextColor={Colors.grey}
+                      keyboardType="numeric"
+                      value={manualNutrition.calories}
+                      onChangeText={(value) => updateManualNutrition('calories', value)}
+                    />
+                    <TextInput
+                      style={CommonStyles.formInput}
+                      placeholder="Protein (g)"
+                      placeholderTextColor={Colors.grey}
+                      keyboardType="numeric"
+                      value={manualNutrition.protein}
+                      onChangeText={(value) => updateManualNutrition('protein', value)}
+                    />
+                    <TextInput
+                      style={CommonStyles.formInput}
+                      placeholder="Carbs (g)"
+                      placeholderTextColor={Colors.grey}
+                      keyboardType="numeric"
+                      value={manualNutrition.carbs}
+                      onChangeText={(value) => updateManualNutrition('carbs', value)}
+                    />
+                    <TextInput
+                      style={CommonStyles.formInput}
+                      placeholder="Fat (g)"
+                      placeholderTextColor={Colors.grey}
+                      keyboardType="numeric"
+                      value={manualNutrition.fat}
+                      onChangeText={(value) => updateManualNutrition('fat', value)}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Text style={CommonStyles.resultText}>Calories: {Math.round(nutrition.calories.value * portionSize)} kcal</Text>
+                    <Text style={CommonStyles.resultText}>Carbs: {Math.round(nutrition.carbs.value * portionSize)} g</Text>
+                    <Text style={CommonStyles.resultText}>Fat: {Math.round(nutrition.fat.value * portionSize)} g</Text>
+                    <Text style={CommonStyles.resultText}>Protein: {Math.round(nutrition.protein.value * portionSize)} g</Text>
+
+                    {/* Portion Size Adjustment Buttons */}
+                    <View style={CommonStyles.portionContainer}>
+                      <Text style={CommonStyles.portionText}>Portion Size:</Text>
+                      <TouchableOpacity
+                        style={[CommonStyles.portionButton, portionSize === 0.8 && CommonStyles.activePortionButton]}
+                        onPress={() => setPortionSize(0.8)}
+                      >
+                        <Text style={CommonStyles.portionButtonText}>Small</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[CommonStyles.portionButton, portionSize === 1 && CommonStyles.activePortionButton]}
+                        onPress={() => setPortionSize(1)}
+                      >
+                        <Text style={CommonStyles.portionButtonText}>Normal</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[CommonStyles.portionButton, portionSize === 1.2 && CommonStyles.activePortionButton]}
+                        onPress={() => setPortionSize(1.2)}
+                      >
+                        <Text style={CommonStyles.portionButtonText}>Large</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Slider for Adjusting Portion Size */}
+                    <View style={CommonStyles.sliderContainer}>
+                      <Text style={CommonStyles.adjustText}>Adjust Portion Size: {portionSize.toFixed(1)}x</Text>
+                      <Slider
+                        style={CommonStyles.slider}
+                        minimumValue={0.2}
+                        maximumValue={1.8}
+                        step={0.1}
+                        value={portionSize}
+                        onValueChange={(value) => setPortionSize(value)}
+                        minimumTrackTintColor={Colors.orange}
+                        maximumTrackTintColor={Colors.lightgrey}
+                        thumbTintColor={Colors.orange}
+                      />
+                    </View>
+                  </>
+                )}
   
                 {/* Choose Photo Button */}
-                <TouchableOpacity style={styles.photoButton} onPress={pickImage}>
-                  <Text style={styles.photoButtonText}>Pick a Meal Photo (optional)</Text>
+                <TouchableOpacity style={CommonStyles.formPhotoButton} onPress={pickImage}>
+                  <Text style={CommonStyles.buttonText}>Pick a Meal Photo (optional)</Text>
                 </TouchableOpacity>
-                {image && <Image source={{ uri: image }} style={styles.imagePreview} />}
+                {image && <Image source={{ uri: image }} style={CommonStyles.imagePreview} />}
               </View>
             )}
   
             {/* Conditional Button Rendering */}
             {!nutrition ? (
-              <View style={styles.singleButtonContainer}>
-                <TouchableOpacity style={styles.largeCancelButton} onPress={() => router.back()}>
-                  <Text style={styles.largeCancelButtonText}>Cancel</Text>
+              <View style={CommonStyles.singleButtonContainer}>
+                <TouchableOpacity style={CommonStyles.largeCancelButton} onPress={() => router.back()}>
+                  <Text style={CommonStyles.largeCancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.buttonContainer}>
-                <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()}>
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
+              <View style={CommonStyles.formButtonContainer}>
+                <TouchableOpacity style={CommonStyles.cancelButton} onPress={() => router.back()}>
+                  <Text style={CommonStyles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.submitButton} onPress={logMeal}>
-                  <Text style={styles.buttonText}>Submit</Text>
+                <TouchableOpacity style={CommonStyles.submitButton} onPress={logMeal}>
+                  <Text style={CommonStyles.buttonText}>Submit</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -255,163 +390,4 @@ export default function LogMeal() {
   );  
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#FFF3E0',
-  },
-  header: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#000',
-  },
-  input: {
-    height: 40,
-    borderColor: '#CCC',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    marginBottom: 15,
-    backgroundColor: '#FFF',
-    marginHorizontal: 20,
-  },
-  estimateButton: {
-    backgroundColor: '#FFA500',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginBottom: 20,
-    marginHorizontal: 20,
-  },
-  logButton: {
-    backgroundColor: '#FFA500',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 20,
-    marginHorizontal: 20,
-  },
-  buttonText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-  },
-  loader: {
-    marginVertical: 20,
-  },
-  resultsContainer: {
-    marginTop: 20,
-    padding: 15,
-    borderRadius: 10,
-    backgroundColor: '#FFF',
-    marginHorizontal: 20,
-  },
-  resultText: {
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  photoButton: {
-    backgroundColor: '#FFA500',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  photoButtonText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-  },
-  imagePreview: {
-    width: '90%',
-    height: 200,
-    marginTop: 20,
-    alignSelf: 'center',
-    borderRadius: 10,
-  },
-  portionContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 20,
-  },
-  portionText: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  portionButton: {
-    backgroundColor: '#FFA500',
-    padding: 10,
-    borderRadius: 5,
-  },
-  activePortionButton: {
-    backgroundColor: '#FF8C00',
-  },
-  portionButtonText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-  },
-  sliderContainer: {
-    marginTop: 20,
-    alignItems: 'center',
-    marginHorizontal: 20,
-  },
-  adjustText: {
-    fontSize: 16,
-    alignSelf: 'flex-start', // Aligns the text to the left within the parent container
-    marginTop: 10, // Adds space below the buttons
-    marginLeft: 10, // Adjusts spacing from the left edge
-    marginBottom: 0, // Adds space between the text and slider
-  },
-  slider: {
-    width: '100%',
-    height: 40,
-    marginVertical: 10,
-  },  
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-    paddingHorizontal: 20,
-  },
-  cancelButton: {
-    backgroundColor: '#CCC',
-    padding: 15,
-    borderRadius: 10,
-    flex: 1,
-    marginRight: 10,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: '#000',
-    fontWeight: 'bold',
-  },
-  submitButton: {
-    backgroundColor: '#FFA500',
-    padding: 15,
-    borderRadius: 10,
-    flex: 1,
-    alignItems: 'center',
-  },
-  singleButtonContainer: {
-    marginTop: 30,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  largeCancelButton: {
-    backgroundColor: '#CCC',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '90%', // Makes the button large and centered
-  },
-  largeCancelButtonText: {
-    color: '#000',
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-});
+const styles = StyleSheet.create({});

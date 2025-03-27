@@ -16,7 +16,10 @@ export default {
   medgreen: "#B8E2B0",
   purple: "#5C6BC0",
   darkpurple: "#1A237E",
+  lightpurple: "#C5CAE9",
   yellow: "#FFFF00",
   pink: "#FFAB91",
   aqua: "#D3E8FF",
+  red: "#FF4444",
+  midorange: "#FFC966",
 };

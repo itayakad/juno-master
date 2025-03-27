@@ -8,18 +8,42 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native';
-import { collection, getDocs, deleteDoc, doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, setDoc, getDoc, DocumentReference, DocumentData } from 'firebase/firestore';
 import { auth, db } from '../FirebaseConfig';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import Colors from '../constants/Colors';
+import CommonStyles from '../constants/CommonStyles';
+
+interface MealLog {
+  id: string;
+  ref: DocumentReference<DocumentData>;
+  timestamp?: { seconds: number };
+  description: string;
+  calories: number;
+  carbs: number;
+  fat: number;
+  protein: number;
+  photoURL?: string;
+}
+
+interface GroupedMealLog {
+  date: string;
+  meals: MealLog[];
+  totalCalories: number;
+}
+
+interface ExpandedDates {
+  [key: string]: boolean;
+}
 
 export default function MealData() {
-  const [groupedLogs, setGroupedLogs] = useState([]);
+  const [groupedLogs, setGroupedLogs] = useState<GroupedMealLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedDates, setExpandedDates] = useState({});
+  const [expandedDates, setExpandedDates] = useState<ExpandedDates>({});
   const router = useRouter();
 
-  const toggleExpand = (date) => {
+  const toggleExpand = (date: string) => {
     setExpandedDates((prev) => ({
       ...prev,
       [date]: !prev[date],
@@ -36,14 +60,14 @@ export default function MealData() {
 
         const logs = querySnapshot.docs.map((doc) => ({
           id: doc.id,
-          ref: doc.ref, // Add the document reference for deletion
+          ref: doc.ref,
           ...doc.data(),
-        }));
+        })) as MealLog[];
 
-        const grouped = logs.reduce((acc, log) => {
-          const date = new Date(
-            log.timestamp?.seconds * 1000
-          ).toLocaleDateString();
+        const grouped = logs.reduce<Record<string, { meals: MealLog[]; totalCalories: number }>>((acc, log) => {
+          const date = log.timestamp?.seconds 
+            ? new Date(log.timestamp.seconds * 1000).toLocaleDateString()
+            : new Date().toLocaleDateString();
 
           if (!acc[date]) {
             acc[date] = {
@@ -72,7 +96,7 @@ export default function MealData() {
     }
   };
 
-  const deleteMealLog = async (logRef, logCalories, logDate) => {
+  const deleteMealLog = async (logRef: DocumentReference<DocumentData>, logCalories: number, logDate: string) => {
     const todayDate = new Date().toLocaleDateString();
   
     Alert.alert(
@@ -85,10 +109,8 @@ export default function MealData() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Delete the meal log from Firestore
               await deleteDoc(logRef);
   
-              // If the meal was logged today, subtract the calories from `caloriesConsumed`
               if (logDate === todayDate) {
                 const user = auth.currentUser;
                 if (user) {
@@ -98,13 +120,12 @@ export default function MealData() {
                   if (userDocSnap.exists()) {
                     const currentCalories = userDocSnap.data().caloriesConsumed || 0;
   
-                    const updatedCalories = Math.max(0, currentCalories - logCalories); // Prevent negative calories
+                    const updatedCalories = Math.max(0, currentCalories - logCalories);
                     await setDoc(userDocRef, { caloriesConsumed: updatedCalories }, { merge: true });
                   }
                 }
               }
   
-              // Refresh logs after deletion
               fetchMealLogs();
             } catch (error) {
               console.error('Error deleting meal log:', error);
@@ -174,7 +195,13 @@ export default function MealData() {
                         </View>
                         <TouchableOpacity
                           style={styles.deleteButton}
-                          onPress={() => deleteMealLog(log.ref, log.calories, new Date(log.timestamp?.seconds * 1000).toLocaleDateString())}
+                          onPress={() => deleteMealLog(
+                            log.ref, 
+                            log.calories, 
+                            log.timestamp?.seconds 
+                              ? new Date(log.timestamp.seconds * 1000).toLocaleDateString()
+                              : new Date().toLocaleDateString()
+                          )}
                         >
                           <Text style={styles.deleteButtonText}>Delete</Text>
                         </TouchableOpacity>
@@ -188,10 +215,10 @@ export default function MealData() {
         )}
       </View>
       <TouchableOpacity
-        style={styles.goBackButton}
+        style={CommonStyles.greyGoBackButton}
         onPress={() => router.replace('/(tabs)')}
       >
-        <Text style={styles.goBackText}>Go Back</Text>
+        <Text style={CommonStyles.buttonText}>Go Back</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -199,114 +226,39 @@ export default function MealData() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#FFF3E0',
-    padding: 20,
+    ...CommonStyles.logContainer,
+    backgroundColor: Colors.lightorange,
   },
-  content: {
-    flex: 1,
-    paddingBottom: 10,
+  content: CommonStyles.logContent,
+  loadingText: CommonStyles.loadingText,
+  noLogsText: CommonStyles.noLogsText,
+  dateSection: CommonStyles.dateSection,
+  dateHeader: {
+    ...CommonStyles.dateHeader,
+    backgroundColor: Colors.orange,
   },
-  goBackButton: {
-    backgroundColor: '#CCC',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    width: '90%',
-    alignSelf: 'center',
-    marginBottom: 20,
+  dateText: CommonStyles.dateText,
+  summaryText: CommonStyles.summaryText,
+  logItemRow: CommonStyles.logItemRow,
+  logContent: CommonStyles.logContent,
+  logText: CommonStyles.logText,
+  photoButton: {
+    ...CommonStyles.photoButton,
+    backgroundColor: Colors.orange,
   },
-  goBackText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: 'bold',
+  deleteButton: {
+    ...CommonStyles.deleteButton,
+    backgroundColor: Colors.red,
   },
+  deleteButtonText: CommonStyles.deleteButtonText,
   header: {
     fontSize: 28,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 20,
-    color: '#000',
-  },
-  loadingText: {
-    fontSize: 16,
-    textAlign: 'center',
-    color: '#555',
-  },
-  noLogsText: {
-    fontSize: 16,
-    textAlign: 'center',
-    color: '#555',
-  },
-  dateSection: {
-    marginBottom: 20,
-    width: '100%',
-  },
-  dateHeader: {
-    backgroundColor: '#FFA500',
-    padding: 15,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    marginHorizontal: 10,
-  },
-  dateText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  summaryText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFE4B5',
-    marginTop: 5,
-  },
-  logItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFF',
-    padding: 15,
-    borderRadius: 10,
-    marginVertical: 5,
-    marginLeft: 10,
-    marginRight: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  logContent: {
-    flex: 1,
-  },
-  logText: {
-    fontSize: 16,
-    color: '#000',
-  },
-  photoButton: {
-    backgroundColor: '#FFA500',
-    padding: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 10,
+    color: Colors.black,
   },
   photoButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  deleteButton: {
-    backgroundColor: '#FF6B6B',
-    paddingVertical: 5,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    marginLeft: 10,
-  },
-  deleteButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',

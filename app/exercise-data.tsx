@@ -8,18 +8,43 @@ import {
   TouchableOpacity,
   SafeAreaView,
 } from 'react-native';
-import { collection, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, DocumentReference, DocumentData } from 'firebase/firestore';
 import { auth, db } from '../FirebaseConfig';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import Colors from '../constants/Colors';
+import CommonStyles from '../constants/CommonStyles';
+
+interface ExerciseLog {
+  id: string;
+  ref: DocumentReference<DocumentData>;
+  timestamp?: { seconds: number };
+  exerciseType: string;
+  duration: number;
+  caloriesBurned: number;
+  notes?: string;
+  hasPhoto?: boolean;
+  photoURL?: string;
+}
+
+interface GroupedExerciseLog {
+  date: string;
+  exercises: ExerciseLog[];
+  totalCalories: number;
+  totalDuration: number;
+}
+
+interface ExpandedDates {
+  [key: string]: boolean;
+}
 
 export default function ExerciseData() {
-  const [groupedLogs, setGroupedLogs] = useState([]);
+  const [groupedLogs, setGroupedLogs] = useState<GroupedExerciseLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedDates, setExpandedDates] = useState({});
+  const [expandedDates, setExpandedDates] = useState<ExpandedDates>({});
   const router = useRouter();
 
-  const toggleExpand = (date) => {
+  const toggleExpand = (date: string) => {
     setExpandedDates((prev) => ({
       ...prev,
       [date]: !prev[date],
@@ -36,14 +61,14 @@ export default function ExerciseData() {
 
         const logs = querySnapshot.docs.map((doc) => ({
           id: doc.id,
-          ref: doc.ref, // Include the Firestore document reference
+          ref: doc.ref,
           ...doc.data(),
-        }));        
+        })) as ExerciseLog[];        
 
-        const grouped = logs.reduce((acc, log) => {
-          const date = new Date(
-            log.timestamp?.seconds * 1000
-          ).toLocaleDateString();
+        const grouped = logs.reduce<Record<string, { exercises: ExerciseLog[]; totalCalories: number; totalDuration: number }>>((acc, log) => {
+          const date = log.timestamp?.seconds 
+            ? new Date(log.timestamp.seconds * 1000).toLocaleDateString()
+            : new Date().toLocaleDateString();
 
           if (!acc[date]) {
             acc[date] = {
@@ -74,11 +99,11 @@ export default function ExerciseData() {
     }
   };
 
-  const deleteExerciseLog = async (logRef) => {
+  const deleteExerciseLog = async (logRef: DocumentReference<DocumentData>) => {
     try {
-      await deleteDoc(logRef); // Delete the log using the Firestore reference
+      await deleteDoc(logRef);
       Alert.alert('Success', 'Log deleted successfully!');
-      fetchExerciseLogs(); // Refresh the logs
+      fetchExerciseLogs();
     } catch (error) {
       console.error('Error deleting log:', error);
       Alert.alert('Error', 'Failed to delete log. Please try again.');
@@ -94,7 +119,7 @@ export default function ExerciseData() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.header}>Exercise Logs</Text>
+        <Text style={CommonStyles.header}>Exercise Logs</Text>
   
         {loading ? (
           <Text style={styles.loadingText}>Loading exercise logs...</Text>
@@ -144,7 +169,7 @@ export default function ExerciseData() {
                                 })
                               }
                             >
-                              <Text style={styles.photoButtonText}>
+                              <Text style={CommonStyles.buttonText}>
                                 View Photo
                               </Text>
                             </TouchableOpacity>
@@ -166,10 +191,10 @@ export default function ExerciseData() {
         )}
       </View>
       <TouchableOpacity
-        style={styles.goBackButton}
+        style={CommonStyles.greyGoBackButton}
         onPress={() => router.replace('/(tabs)')}
       >
-        <Text style={styles.goBackText}>Go Back</Text>
+        <Text style={CommonStyles.buttonText}>Go Back</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );  
@@ -177,116 +202,29 @@ export default function ExerciseData() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#D3F9D8',
-    padding: 20,
+    ...CommonStyles.logContainer,
+    backgroundColor: Colors.lightgreen,
   },
-  content: {
-    flex: 1,
-    paddingBottom: 10,
-  },
-  goBackButton: {
-    backgroundColor: '#CCC',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    width: '90%',
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  goBackText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  header: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#000',
-  },
-  loadingText: {
-    fontSize: 16,
-    textAlign: 'center',
-    color: '#555',
-  },
-  noLogsText: {
-    fontSize: 16,
-    textAlign: 'center',
-    color: '#555',
-  },
-  dateSection: {
-    marginBottom: 20,
-    width: '100%',
-  },
+  content: CommonStyles.logContent,
+  loadingText: CommonStyles.loadingText,
+  noLogsText: CommonStyles.noLogsText,
+  dateSection: CommonStyles.dateSection,
   dateHeader: {
-    backgroundColor: '#32CD32',
-    padding: 15,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    marginHorizontal: 10,
+    ...CommonStyles.dateHeader,
+    backgroundColor: Colors.green,
   },
-  dateText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  summaryText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#E3F2FD',
-    marginTop: 5,
-  },
-  logItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFF',
-    padding: 15,
-    borderRadius: 10,
-    marginVertical: 5,
-    marginLeft: 10,
-    marginRight: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  logContent: {
-    flex: 1,
-  },
-  logText: {
-    fontSize: 16,
-    color: '#000',
-  },
+  dateText: CommonStyles.dateText,
+  summaryText: CommonStyles.summaryText,
+  logItemRow: CommonStyles.logItemRow,
+  logContent: CommonStyles.logContent,
+  logText: CommonStyles.logText,
   photoButton: {
-    backgroundColor: '#32CD32',
-    padding: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  photoButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    ...CommonStyles.photoButton,
+    backgroundColor: Colors.green,
   },
   deleteButton: {
-    backgroundColor: '#FF6B6B',
-    paddingVertical: 5,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    marginLeft: 10,
+    ...CommonStyles.deleteButton,
+    backgroundColor: Colors.red,
   },
-  deleteButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  deleteButtonText: CommonStyles.deleteButtonText,
 });

@@ -1,0 +1,2 @@
+export const SPOONACULAR_API_KEY = '78ce4b73a54e47deaa040375d8417f49';
+export const FIREBASE_API_KEY = 'AIzaSyB6P0PUJaiOHyveFYGwIVl7w5LEDrIcEGA';

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   View,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -14,25 +13,30 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { db, auth, storage } from '../FirebaseConfig'; // Ensure storage is initialized
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'; // Import Firebase Storage methods
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
+import Colors from '../constants/Colors';
+import CommonStyles from '../constants/CommonStyles';
+
+type ExerciseType = 'Running' | 'Cycling' | 'Swimming' | 'Yoga' | 'Weightlifting' | null;
 
 export default function LogExercise() {
   const router = useRouter();
 
   // State variables
-  const [exerciseType, setExerciseType] = useState(null);
+  const [exerciseType, setExerciseType] = useState<ExerciseType>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [duration, setDuration] = useState('');
   const [notes, setNotes] = useState('');
-  const [image, setImage] = useState(null); // State for selected image
-  const [imageURL, setImageURL] = useState(''); // State for uploaded image URL
-  const [recordWorkout, setRecordWorkout] = useState(''); // State for personal record workout
-  const [recordQuantity, setRecordQuantity] = useState(''); // State for personal record quantity
+  const [image, setImage] = useState<string | null>(null);
+  const [imageURL, setImageURL] = useState('');
+  const [recordWorkout, setRecordWorkout] = useState('');
+  const [recordQuantity, setRecordQuantity] = useState('');
 
   const exerciseOptions = [
     { label: 'Running', value: 'Running' },
@@ -42,10 +46,10 @@ export default function LogExercise() {
     { label: 'Weightlifting', value: 'Weightlifting' },
   ];
 
-  const calculateCalories = () => {
+  const calculateCalories = (): number => {
     const durationInMinutes = parseInt(duration);
     if (isNaN(durationInMinutes) || durationInMinutes <= 0 || !exerciseType) {
-      return 'N/A';
+      return 0;
     }
 
     const caloriesPerMinute = {
@@ -161,19 +165,20 @@ export default function LogExercise() {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <SafeAreaView style={styles.container}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
+      <SafeAreaView style={[CommonStyles.formContainer, { backgroundColor: Colors.lightgreen }]}>
+        <KeyboardAwareScrollView
+          contentContainerStyle={[CommonStyles.formScrollContainer, { paddingHorizontal: 20 }]}
+          keyboardShouldPersistTaps="handled"
+          enableOnAndroid={true}
+          enableAutomaticScroll={true}
+          keyboardOpeningTime={0}
+          extraScrollHeight={Platform.OS === 'ios' ? 120 : 40}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContainer}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Text style={styles.header}>Log Exercise</Text>
+          <Text style={[CommonStyles.formHeader, { marginBottom: 25, fontSize: 32 }]}>Log Exercise</Text>
 
-            <Text style={styles.label}>Select Exercise Type:</Text>
-            <View style={[styles.dropdownWrapper, { zIndex: 1000 }]}>
+          <View style={{ marginBottom: 15 }}>
+            <Text style={[CommonStyles.label, { paddingHorizontal: 0, fontSize: 18, marginBottom: 8 }]}>Select Exercise Type:</Text>
+            <View style={[CommonStyles.dropdownWrapper, { zIndex: 1000, paddingHorizontal: 0 }]}>
               <DropDownPicker
                 open={dropdownOpen}
                 value={exerciseType}
@@ -181,191 +186,113 @@ export default function LogExercise() {
                 setOpen={setDropdownOpen}
                 setValue={setExerciseType}
                 placeholder="Choose exercise type"
-                style={styles.dropdown}
-                dropDownContainerStyle={styles.dropdownContainer}
+                style={[CommonStyles.dropdown, { 
+                  height: 50,
+                  borderWidth: 1,
+                  borderColor: Colors.lightgrey,
+                  borderRadius: 10
+                }]}
+                dropDownContainerStyle={[CommonStyles.dropdownContainer, {
+                  borderColor: Colors.lightgrey,
+                  borderRadius: 10,
+                  marginTop: 1
+                }]}
+                placeholderStyle={{ color: Colors.grey }}
+                textStyle={{ color: Colors.black }}
+                listMode="SCROLLVIEW"
+                scrollViewProps={{
+                  nestedScrollEnabled: true
+                }}
               />
             </View>
+          </View>
 
-            <Text style={styles.label}>Duration (minutes):</Text>
+          <View style={{ marginBottom: 15 }}>
+            <Text style={[CommonStyles.label, { paddingHorizontal: 0, fontSize: 18, marginBottom: 8 }]}>Duration (minutes):</Text>
             <TextInput
-              style={styles.input}
+              style={[CommonStyles.formInput, { 
+                height: 50,
+                borderWidth: 1,
+                borderColor: Colors.lightgrey,
+                borderRadius: 10,
+                paddingHorizontal: 15,
+                fontSize: 16
+              }]}
               placeholder="Enter duration in minutes"
-              placeholderTextColor="#6C757D"
+              placeholderTextColor={Colors.grey}
               keyboardType="numeric"
               value={duration}
               onChangeText={setDuration}
             />
+          </View>
 
-            <Text style={styles.label}>Estimated Calories Burned:</Text>
-            <Text style={styles.caloriesText}>{calculateCalories()} kcal</Text>
+          <View style={{ marginBottom: 15 }}>
+            <Text style={[CommonStyles.label, { paddingHorizontal: 0, fontSize: 18, marginBottom: 8 }]}>Estimated Calories Burned:</Text>
+            <Text style={[CommonStyles.resultText, { fontSize: 20, fontWeight: '600', paddingHorizontal: 0 }]}>{calculateCalories()} kcal</Text>
+          </View>
 
-            <Text style={styles.label}>Personal Record (optional)</Text>
-            <View style={styles.row}>
-              <TextInput
-                style={[styles.input, styles.halfInput]}
-                placeholder="Workout (e.g., Bench Press)"
-                placeholderTextColor="#6C757D"
-                value={recordWorkout}
-                onChangeText={setRecordWorkout}
-              />
-              <TextInput
-                style={[styles.input, styles.halfInput]}
-                placeholder="Record Quantity (e.g., 200 lbs)"
-                placeholderTextColor="#6C757D"
-                keyboardType="numeric"
-                value={recordQuantity}
-                onChangeText={setRecordQuantity}
-              />
-            </View>
-
-            <Text style={styles.label}>Notes (optional):</Text>
+          <View style={{ marginBottom: 15 }}>
+            <Text style={[CommonStyles.label, { paddingHorizontal: 0, fontSize: 18, marginBottom: 8 }]}>Notes (optional):</Text>
             <TextInput
-              style={[styles.input, styles.notesInput]}
+              style={[CommonStyles.formInput, { 
+                height: 100,
+                borderWidth: 1,
+                borderColor: Colors.lightgrey,
+                borderRadius: 10,
+                paddingHorizontal: 15,
+                paddingTop: 12,
+                fontSize: 16,
+                textAlignVertical: 'top'
+              }]}
               placeholder="Add notes about your session"
-              placeholderTextColor="#6C757D"
+              placeholderTextColor={Colors.grey}
               multiline
               value={notes}
               onChangeText={setNotes}
             />
+          </View>
 
-            <TouchableOpacity style={styles.photoButton} onPress={pickImage}>
-              <Text style={styles.photoButtonText}>Pick a Progress Photo (optional)</Text>
+          <TouchableOpacity 
+            style={[CommonStyles.formPhotoButton, { 
+              backgroundColor: Colors.green,
+              marginBottom: 15,
+              height: 50,
+              borderRadius: 10,
+              justifyContent: 'center'
+            }]} 
+            onPress={pickImage}
+          >
+            <Text style={[CommonStyles.buttonText, { fontSize: 16 }]}>Pick a Progress Photo (optional)</Text>
+          </TouchableOpacity>
+          {image && <Image source={{ uri: image }} style={[CommonStyles.imagePreview, { marginBottom: 15, borderRadius: 10 }]} />}
+
+          <View style={[CommonStyles.formButtonContainer, { marginTop: 10, paddingHorizontal: 0, gap: 15 }]}>
+            <TouchableOpacity 
+              style={[CommonStyles.cancelButton, { 
+                height: 50,
+                borderRadius: 10,
+                justifyContent: 'center'
+              }]} 
+              onPress={() => router.back()}
+            >
+              <Text style={[CommonStyles.cancelButtonText, { fontSize: 16 }]}>Cancel</Text>
             </TouchableOpacity>
-            {image && <Image source={{ uri: image }} style={styles.imagePreview} />}
-
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-                <Text style={styles.buttonText}>Submit</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+            <TouchableOpacity 
+              style={[CommonStyles.submitButton, { 
+                backgroundColor: Colors.green,
+                height: 50,
+                borderRadius: 10,
+                justifyContent: 'center'
+              }]} 
+              onPress={handleSubmit}
+            >
+              <Text style={[CommonStyles.buttonText, { fontSize: 16 }]}>Submit</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAwareScrollView>
       </SafeAreaView>
     </TouchableWithoutFeedback>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    padding: 20,
-    backgroundColor: '#D3F9D8',
-  },
-  header: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#000',
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 5,
-    color: '#000',
-    paddingHorizontal: 20,
-  },
-  dropdownWrapper: {
-    marginBottom: 15,
-    zIndex: 1000,
-    paddingHorizontal: 20,
-  },
-  dropdown: {
-    backgroundColor: '#FFF',
-    borderColor: '#CCC',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    color: '#000',
-  },
-  dropdownContainer: {
-    borderColor: '#CCC',
-    borderRadius: 10,
-  },
-  input: {
-    height: 40,
-    borderColor: '#CCC',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    marginBottom: 15,
-    backgroundColor: '#FFF',
-    marginHorizontal: 20,
-    color: '#000',
-  },
-  caloriesText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 15,
-    color: '#808080',
-    paddingHorizontal: 20,
-  },
-  notesInput: {
-    height: 80,
-    textAlignVertical: 'top',
-    borderRadius: 10,
-    marginHorizontal: 20,
-    backgroundColor: '#FFF',
-    color: '#000',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-    paddingHorizontal: 20,
-  },
-  cancelButton: {
-    backgroundColor: '#CCC',
-    padding: 15,
-    borderRadius: 10,
-    flex: 1,
-    marginRight: 10,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: '#000',
-    fontWeight: 'bold',
-  },
-  submitButton: {
-    backgroundColor: '#32CD32',
-    padding: 15,
-    borderRadius: 10,
-    flex: 1,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-  },
-  photoButton: {
-    backgroundColor: '#32CD32',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 20,
-    marginHorizontal: 20,
-  },
-  photoButtonText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-  },
-  imagePreview: {
-    width: '90%',
-    height: 200,
-    marginTop: 20,
-    alignSelf: 'center',
-    borderRadius: 10,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginHorizontal: 20,
-    marginBottom: 15,
-  },
-  halfInput: {
-    flex: 1,
-    marginHorizontal: 5, // Add spacing between the inputs
-  },  
-});
+const styles = StyleSheet.create({});
