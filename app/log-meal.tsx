@@ -20,10 +20,10 @@ import { collection, addDoc, doc, getDoc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
-import { SPOONACULAR_API_KEY } from '../constants/ApiKey';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '../constants/Colors';
 import CommonStyles from '../constants/CommonStyles';
+import { SPOONACULAR_API_KEY } from '@env';
 
 interface NutritionData {
   calories: { value: number };
